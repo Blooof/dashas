@@ -49,15 +49,14 @@ public class FragmentLoader extends EventDispatcher {
 
     private var _waitTimer:Timer;
 
-    public function FragmentLoader(manifest:ManifestHandler, iterator:AdaptiveSegmentDispatcher,
-                                   monitor:BandwidthMonitor, mixer:Muxer) {
-       _manifest = manifest;
-       _iterator = iterator;
-       _monitor = monitor;
-       _mixer = mixer;
+    public function FragmentLoader(manifest:ManifestHandler, iterator:AdaptiveSegmentDispatcher, monitor:BandwidthMonitor, mixer:Muxer) {
+        _manifest = manifest;
+        _iterator = iterator;
+        _monitor = monitor;
+        _mixer = mixer;
 
-       _waitTimer = new Timer(250); // 250 ms
-       _waitTimer.addEventListener(TimerEvent.TIMER, loadNextFragment);
+        _waitTimer = new Timer(250); // 250 ms
+        _waitTimer.addEventListener(TimerEvent.TIMER, loadNextFragment);
     }
 
     public function init():void {
@@ -66,16 +65,45 @@ public class FragmentLoader extends EventDispatcher {
         loadIndexSegments(_manifest.videoRepresentations, onIndexSegmentLoaded);
     }
 
+    private static var FRAGMENTS_BY_SEGMENT = [];
+
+    public static function ADD_SEGMENT_FRAGMENTS_OFFETS(segmentMetadata:Object):void {
+        FRAGMENTS_BY_SEGMENT.push(segmentMetadata);
+
+        if (FRAGMENTS_BY_SEGMENT.length > 1) {
+            var prevSegmentMetadata = FRAGMENTS_BY_SEGMENT[FRAGMENTS_BY_SEGMENT.length - 2];
+            var lastFragmentPrevSegment = prevSegmentMetadata[prevSegmentMetadata.length - 1];
+            segmentMetadata.forEach(function (fragmentMetadata) {
+                fragmentMetadata.from += lastFragmentPrevSegment.to;
+                fragmentMetadata.to += lastFragmentPrevSegment.to;
+                fragmentMetadata.timeFrom += lastFragmentPrevSegment.timeTo;
+                fragmentMetadata.timeTo += lastFragmentPrevSegment.timeTo;
+            });
+        }
+
+        //Console.js(JSON.stringify(segmentMetadata));
+    }
+
+    private var _sourceSeekTimestamp;
+
     public function seek(timestamp:Number):Number {
         close();
+        _sourceSeekTimestamp = timestamp;
 
         _videoSegment = MediaDataSegment(_iterator.getVideoSegment(timestamp));
-
         _videoOffset = _videoSegment.startTimestamp;
 
-        Console.getInstance().info("Seek to video segment: " + _videoSegment);
+        var ts = _videoOffset;
+        FRAGMENTS_BY_SEGMENT.forEach(function (segment, ...rest):void {
+            segment.forEach(function (fragment, ...rest):void {
+                if (fragment.timeFrom < timestamp && fragment.timeTo > timestamp) {
+                    ts = fragment.timeFrom;
+                }
+            })
+        });
+        //_videoOffset = Math.floor(timestamp);
 
-        return _videoSegment.startTimestamp; // offset
+        return _videoOffset; // offset
     }
 
     public function loadFirstFragment():void {
@@ -192,11 +220,10 @@ public class FragmentLoader extends EventDispatcher {
         var offset:Number = findSmallerOffset();
 
         Console.getInstance().debug("Processing video segment...");
-
         _videoSegmentHandler = new MediaSegmentHandler(event.bytes, _initializationSegmentHandler.messages,
                 _initializationSegmentHandler.videoDefaultSampleDuration, _initializationSegmentHandler.audioDefaultSampleDuration,
                 _initializationSegmentHandler.videoTimescale, _initializationSegmentHandler.audioTimescale,
-                (_videoSegment.startTimestamp - offset) * 1000, _mixer);
+                (_videoSegment.startTimestamp - offset) * 1000, _mixer, _videoSegment, _sourceSeekTimestamp);
 
         Console.getInstance().debug("Processed video segment");
 

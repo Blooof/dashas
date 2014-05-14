@@ -13,6 +13,10 @@ import com.castlabs.dash.boxes.Muxer;
 import com.castlabs.dash.boxes.NalUnit;
 import com.castlabs.dash.boxes.TrackFragmentHeaderBox;
 import com.castlabs.dash.boxes.TrackFragmentRunBox;
+import com.castlabs.dash.descriptors.index.SegmentRange;
+import com.castlabs.dash.descriptors.segments.MediaDataSegment;
+import com.castlabs.dash.loaders.FragmentLoader;
+import com.castlabs.dash.utils.Console;
 
 import flash.utils.ByteArray;
 
@@ -33,9 +37,16 @@ public class MediaSegmentHandler extends SegmentHandler {
 
     private var _muxer:Muxer;
 
-    public function MediaSegmentHandler(ba:ByteArray, messages:Vector.<FLVTag>, videoDefaultSampleDuration:uint,
-                                        audioDefaultSampleDuration:uint, videoTimescale:uint,
-                                        audioTimescale:uint, timestamp:Number, muxer:Muxer) {
+    private var _segmentFragmentsOffsets:Array = [];
+    private var _fragmentTimeOffset = 0;
+    private var _lastFragmentMetadata;
+    private var _videoSegment:MediaDataSegment;
+    private var _sourceSeekTimestamp:Number;
+
+    public function MediaSegmentHandler(ba:ByteArray, messages:Vector.<FLVTag>, videoDefaultSampleDuration:uint, audioDefaultSampleDuration:uint, videoTimescale:uint, audioTimescale:uint, timestamp:Number, muxer:Muxer, videoSegment:MediaDataSegment, sourceSeekTimestamp:Number) {
+        _sourceSeekTimestamp = sourceSeekTimestamp;
+        _videoSegment = videoSegment;
+
         _messages = messages;
         _videoDefaultSampleDuration = videoDefaultSampleDuration;
         _audioDefaultSampleDuration = audioDefaultSampleDuration;
@@ -50,7 +61,11 @@ public class MediaSegmentHandler extends SegmentHandler {
             parseMovieFragmentBox(ba, ba.position);
             parseMediaDataBox(ba);
         }
-        mux();
+
+        _bytes = _muxer.mux(_messages);
+        _bytes.position = 0; // reset
+
+        FragmentLoader.ADD_SEGMENT_FRAGMENTS_OFFETS(_segmentFragmentsOffsets);
     }
 
     public function get bytes():ByteArray {
@@ -74,13 +89,21 @@ public class MediaSegmentHandler extends SegmentHandler {
         validateType("mdat", type);
         validateSize(size);
 
+        _lastFragmentMetadata = {from: initPosition, to: initPosition + size};
+
+        /*if (video) {
+         timeOffset += sampleDuration / _videoTimescale;
+         }
+         if (_sourceSeekTimestamp < _videoSegment.startTimestamp + timeOffset) {
+         _messages.push(message);
+         dataOffset = dataOffset + sampleSizes[i];
+         } else {
+         Console.js('skip', _sourceSeekTimestamp, _videoSegment.startTimestamp, timeOffset)
+         }*/
+
+
         processTrackBox(ba);
         ba.position = initPosition + size;
-    }
-
-    private function mux():void {
-        _bytes = _muxer.mux(_messages);
-        _bytes.position = 0; // reset
     }
 
     public function processTrackBox(ba:ByteArray):void {
@@ -125,10 +148,15 @@ public class MediaSegmentHandler extends SegmentHandler {
         }
     }
 
+    private var timeOffset = 0;
+
     private function loadMessages(runBox:TrackFragmentRunBox, baseDataOffset:Number, ba:ByteArray, video:Boolean):void {
         var dataOffset:uint = runBox.dataOffset + baseDataOffset;
         var sampleSizes:Vector.<uint> = runBox.sampleSize;
 
+        var m:Vector.<FLVTag> = new Vector.<FLVTag>();
+        var skipped = false;
+        var fragmentTimeOffset = 0;
         for (var i:uint = 0; i < sampleSizes.length; i++) {
             var sampleDuration:uint = loadSampleDuration(runBox, i, video ? _videoDefaultSampleDuration : _audioDefaultSampleDuration);
             var compositionTimeOffset:int = loadCompositionTimeOffset(runBox, i);
@@ -139,10 +167,33 @@ public class MediaSegmentHandler extends SegmentHandler {
                     compositionTimeOffset, dataOffset, ba) : buildAudioMessage(sampleDuration, sampleSizes[i], sampleDependsOn, sampleIsDependedOn,
                     compositionTimeOffset, dataOffset, ba);
 
-            _messages.push(message);
 
+            m.push(message);
             dataOffset = dataOffset + sampleSizes[i];
+
+            if (video) {
+                timeOffset += sampleDuration / _videoTimescale;
+            }
+            if (_sourceSeekTimestamp < _videoSegment.startTimestamp + timeOffset) {
+            } else {
+                Console.js('skip', _sourceSeekTimestamp, _videoSegment.startTimestamp, timeOffset);
+                skipped = true;
+            }
+
+            fragmentTimeOffset += sampleDuration;
         }
+
+        if (!skipped) {
+            _messages = _messages.concat(m)
+        }
+
+        if (video) {
+            _lastFragmentMetadata.timeFrom = _fragmentTimeOffset;
+            _lastFragmentMetadata.timeTo = _fragmentTimeOffset = _fragmentTimeOffset + fragmentTimeOffset / _videoTimescale;
+            _segmentFragmentsOffsets.push(_lastFragmentMetadata);
+        }
+
+
     }
 
     private function loadSampleDuration(runBox:TrackFragmentRunBox, i:uint, def:uint):uint {
@@ -161,9 +212,7 @@ public class MediaSegmentHandler extends SegmentHandler {
         return i < runBox.sampleIsDependedOn.length ? runBox.sampleIsDependedOn[i] : 0;
     }
 
-    protected function buildVideoMessage(sampleDuration:uint, sampleSize:uint, sampleDependsOn:uint,
-                                             sampleIsDependedOn:uint, compositionTimeOffset:Number,
-                                             dataOffset:uint, ba:ByteArray):FLVTag {
+    protected function buildVideoMessage(sampleDuration:uint, sampleSize:uint, sampleDependsOn:uint, sampleIsDependedOn:uint, compositionTimeOffset:Number, dataOffset:uint, ba:ByteArray):FLVTag {
         var message:FLVTag = new FLVTag();
 
         message.markAsVideo();
@@ -197,9 +246,7 @@ public class MediaSegmentHandler extends SegmentHandler {
     }
 
 
-    protected function buildAudioMessage(sampleDuration:uint, sampleSize:uint, sampleDependsOn:uint,
-                                             sampleIsDependedOn:uint, compositionTimeOffset:Number,
-                                             dataOffset:uint, ba:ByteArray):FLVTag {
+    protected function buildAudioMessage(sampleDuration:uint, sampleSize:uint, sampleDependsOn:uint, sampleIsDependedOn:uint, compositionTimeOffset:Number, dataOffset:uint, ba:ByteArray):FLVTag {
         var message:FLVTag = new FLVTag();
 
         message.markAsAudio();

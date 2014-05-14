@@ -12,6 +12,7 @@ import com.castlabs.dash.descriptors.segments.MediaDataSegment;
 import com.castlabs.dash.descriptors.segments.ReflexiveSegment;
 import com.castlabs.dash.descriptors.segments.Segment;
 import com.castlabs.dash.handlers.IndexSegmentHandler;
+import com.castlabs.dash.handlers.MediaSegmentHandler;
 import com.castlabs.dash.utils.Console;
 
 import flash.utils.ByteArray;
@@ -28,18 +29,15 @@ public class SegmentRange implements SegmentIndex {
         _initializationRange = traverseAndBuildInitializationRange(representation);
     }
 
-    public function getInitializationSegment(representationId:String, bandwidth:Number, baseUrl:String,
-                                             internalRepresentationId:Number):Segment {
+    public function getInitializationSegment(representationId:String, bandwidth:Number, baseUrl:String, internalRepresentationId:Number):Segment {
         return new DataSegment(internalRepresentationId, baseUrl + _baseUrl, _initializationRange);
     }
 
-    public function getIndexSegment(representationId:String, bandwidth:Number, baseUrl:String,
-                                    internalRepresentationId:Number):Segment {
+    public function getIndexSegment(representationId:String, bandwidth:Number, baseUrl:String, internalRepresentationId:Number):Segment {
         return new ReflexiveSegment(internalRepresentationId, baseUrl + _baseUrl, _indexRange, onIndexSegmentLoaded);
     }
 
-    public function getSegment(timestamp:Number, representationId:String, bandwidth:Number, baseUrl:String,
-                               duration:Number, internalRepresentationId:Number):Segment {
+    public function getSegment(timestamp:Number, representationId:String, bandwidth:Number, baseUrl:String, duration:Number, internalRepresentationId:Number):Segment {
         var index:Number = calculateIndex(timestamp);
 
         if (index < 0 || index >= _indexSegmentHandler.references.length) {
@@ -48,8 +46,28 @@ public class SegmentRange implements SegmentIndex {
 
         var reference:Object = _indexSegmentHandler.references[index];
 
-        return new MediaDataSegment(internalRepresentationId, baseUrl + _baseUrl, reference.range,
-                reference.startTimestamp, reference.endTimestamp);
+        var range = reference.range;
+        var startTimestamp = reference.startTimestamp;
+        var endTimestamp = reference.endTimestamp;
+        var timeOffset = reference.timeOffset;
+
+        /* var fragmentsOfSegment = FRAGMENTS_BY_SEGMENT[index];
+         if (fragmentsOfSegment) {
+         //Console.js(JSON.stringify(fragmentsOfSegment));
+         fragmentsOfSegment.forEach(function (segmentMetadata) {
+         Console.js(segmentMetadata.timeFrom, timestamp, segmentMetadata.timeTo);
+         if (segmentMetadata.timeFrom < timestamp && segmentMetadata.timeTo > timestamp) {
+         var firstMoofOffset = int(_indexSegmentHandler.references[0].range.split('-')[0]);
+         var lastFragment:Object = fragmentsOfSegment[fragmentsOfSegment.length - 1];
+
+         range = (segmentMetadata.from+firstMoofOffset) + "-" + (firstMoofOffset+lastFragment.to - 1);
+         startTimestamp = segmentMetadata.timeFrom;
+         endTimestamp = lastFragment.timeTo;
+         }
+         });
+         }*/
+
+        return new MediaDataSegment(internalRepresentationId, baseUrl + _baseUrl, range, startTimestamp, endTimestamp, timeOffset);
     }
 
     public function update(xml:XML):void {

@@ -85,7 +85,10 @@ public class IndexSegmentHandler {
                 box.position += 4;
 
                 var reference:Object = {};
-                reference.range = offset + "-" + (offset + referenceSize - 1);
+                reference.from = offset;
+                reference.to = offset + referenceSize - 1;
+                reference.range = reference.from + "-" + reference.to;
+                reference.timeOffset = _references.length > 1 ? _references[_references.length - 1].endTimestamp : 0;
                 reference.startTimestamp = time / timescale; // seconds
                 reference.endTimestamp = (time + referenceDuration) / timescale; // seconds
 

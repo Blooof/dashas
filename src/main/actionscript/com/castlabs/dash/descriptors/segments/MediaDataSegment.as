@@ -11,11 +11,14 @@ public class MediaDataSegment extends DataSegment {
     protected var _startTimestamp:Number; // seconds
     protected var _endTimestamp:Number; // seconds
 
+    private var _timeOffset:Number;
+
     public function MediaDataSegment(internalRepresentationId:Number, url:String, range:String,
-                                     startTimestamp:Number, endTimestamp:Number) {
+                                     startTimestamp:Number, endTimestamp:Number,timeOffset:Number) {
         super(internalRepresentationId, url, range);
         _startTimestamp = startTimestamp;
         _endTimestamp = endTimestamp;
+        _timeOffset = timeOffset;
     }
 
     public function get startTimestamp():Number {
@@ -24,6 +27,10 @@ public class MediaDataSegment extends DataSegment {
 
     public function get endTimestamp():Number {
         return _endTimestamp;
+    }
+
+    public function get timeOffset():Number {
+        return _timeOffset;
     }
 
     override public function toString():String {

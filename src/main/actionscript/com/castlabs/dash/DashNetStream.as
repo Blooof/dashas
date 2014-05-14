@@ -21,6 +21,7 @@ import flash.net.NetStream;
 import flash.net.NetStreamAppendBytesAction;
 import flash.utils.ByteArray;
 import flash.utils.Timer;
+import flash.utils.setTimeout;
 
 import org.osmf.net.NetStreamCodes;
 
@@ -87,7 +88,7 @@ public class DashNetStream extends NetStream {
     private function onBufferTimer(timerEvent:TimerEvent):void {
         var bufferTime:Number = _loadedTimestamp - time;
 
-        switch(_state) {
+        switch (_state) {
             case PLAYING:
                 if (!_loaded && bufferTime < MIN_BUFFER_TIME) {
                     pause();
@@ -342,9 +343,9 @@ public class DashNetStream extends NetStream {
     }
 
     private function onNetStatus(event:NetStatusEvent):void {
-        switch(event.info.code) {
+        switch (event.info.code) {
             case NetStreamCodes.NETSTREAM_BUFFER_EMPTY:
-                if  (_loaded) {
+                if (_loaded) {
                     close();
                     notifyPlayUnpublish();
                 }

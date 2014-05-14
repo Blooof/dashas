@@ -28,8 +28,7 @@ public class SegmentTemplate implements SegmentIndex {
         _startNumber = traverseAndBuildStartNumber(representation);
     }
 
-    public function getInitializationSegment(representationId:String, bandwidth:Number, baseUrl:String,
-                                             internalRepresentationId:Number):Segment {
+    public function getInitializationSegment(representationId:String, bandwidth:Number, baseUrl:String, internalRepresentationId:Number):Segment {
         var url:String = String(_initializationSegmentFilename);
 
         url = url.replace("$RepresentationID$", representationId);
@@ -38,13 +37,11 @@ public class SegmentTemplate implements SegmentIndex {
         return new DataSegment(internalRepresentationId, baseUrl + url);
     }
 
-    public function getIndexSegment(representationId:String, bandwidth:Number, baseUrl:String,
-                                    internalRepresentationId:Number):Segment {
+    public function getIndexSegment(representationId:String, bandwidth:Number, baseUrl:String, internalRepresentationId:Number):Segment {
         return new NullSegment(internalRepresentationId);
     }
 
-    public function getSegment(timestamp:Number, representationId:String, bandwidth:Number, baseUrl:String,
-                               duration:Number, internalRepresentationId:Number):Segment {
+    public function getSegment(timestamp:Number, representationId:String, bandwidth:Number, baseUrl:String, duration:Number, internalRepresentationId:Number):Segment {
         var index:Number = calculateIndex(timestamp);
 
         if (isOutOfRange(index, duration)) {
@@ -60,7 +57,7 @@ public class SegmentTemplate implements SegmentIndex {
         var startTimestamp:Number = index * segmentDuration;
         var endTimestamp:Number = startTimestamp + segmentDuration;
 
-        return new MediaDataSegment(internalRepresentationId, baseUrl + url, "0-", startTimestamp, endTimestamp);
+        return new MediaDataSegment(internalRepresentationId, baseUrl + url, "0-", startTimestamp, endTimestamp, 0);
     }
 
     public function update(xml:XML):void {
