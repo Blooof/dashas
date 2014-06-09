@@ -7,15 +7,18 @@
  */
 
 package com.castlabs.dash {
+import com.castlabs.dash.descriptors.segments.MediaDataSegment;
 import com.castlabs.dash.events.FragmentEvent;
 import com.castlabs.dash.events.SegmentEvent;
 import com.castlabs.dash.events.StreamEvent;
 import com.castlabs.dash.handlers.ManifestHandler;
 import com.castlabs.dash.loaders.FragmentLoader;
 import com.castlabs.dash.utils.Console;
+import com.castlabs.dash.utils.Console;
 
 import flash.events.NetStatusEvent;
 import flash.events.TimerEvent;
+import flash.external.ExternalInterface;
 import flash.net.NetConnection;
 import flash.net.NetStream;
 import flash.net.NetStreamAppendBytesAction;
@@ -25,8 +28,9 @@ import flash.utils.Timer;
 import org.osmf.net.NetStreamCodes;
 
 public class DashNetStream extends NetStream {
-    private const MIN_BUFFER_TIME:Number = 5;
-    private const MAX_BUFFER_TIME:Number = 30;
+    private var MIN_BUFFER_TIME:Number;
+    private var MAX_BUFFER_TIME:Number;
+    private var MAX_CACHE_TIME:Number;
 
     // actions
     private const PLAY:uint = 1;
@@ -51,6 +55,7 @@ public class DashNetStream extends NetStream {
 
     private var _offset:Number = 0;
     private var _loadedTimestamp:Number = 0;
+    private var _cachedTimestamp = 0;
     private var _duration:Number = 0;
     private var _live:Boolean;
 
@@ -72,8 +77,6 @@ public class DashNetStream extends NetStream {
     override public function play(...rest):void {
         super.play(null);
 
-        appendBytesAction(NetStreamAppendBytesAction.RESET_BEGIN);
-        appendFileHeader();
 
         notifyPlayStart();
 
@@ -82,12 +85,15 @@ public class DashNetStream extends NetStream {
         jump();
 
         updateState(PLAY);
+
+        appendBytesAction(NetStreamAppendBytesAction.RESET_BEGIN);
+        appendFileHeader();
+
     }
 
     private function onBufferTimer(timerEvent:TimerEvent):void {
-        var bufferTime:Number = _loadedTimestamp - time;
-
-        switch(_state) {
+        var bufferTime:Number = _cachedTimestamp - time;
+        switch (_state) {
             case PLAYING:
                 if (!_loaded && bufferTime < MIN_BUFFER_TIME) {
                     pause();
@@ -181,7 +187,7 @@ public class DashNetStream extends NetStream {
             }
 
             // seconds
-            return _loadedTimestamp;
+            return _cachedTimestamp;
         }
     }
 
@@ -204,6 +210,10 @@ public class DashNetStream extends NetStream {
         _live = manifest.live;
         _duration = manifest.duration;
 
+        MIN_BUFFER_TIME = Math.min(5, _duration);
+        MAX_BUFFER_TIME = Math.max(180, Math.floor(_duration / 7)); //Math.min(3, _duration);
+        MAX_CACHE_TIME = Math.max(180, Math.floor(_duration / 7));
+
         _loader = Factory.createFragmentLoader(manifest);
         _loader.addEventListener(StreamEvent.READY, onReady);
         _loader.addEventListener(FragmentEvent.LOADED, onLoaded);
@@ -211,6 +221,7 @@ public class DashNetStream extends NetStream {
         _loader.addEventListener(SegmentEvent.ERROR, onError);
         _loader.init();
     }
+
 
     private function appendFileHeader():void {
         var output:ByteArray = new ByteArray();
@@ -322,6 +333,7 @@ public class DashNetStream extends NetStream {
 
     private function onLoaded(event:FragmentEvent):void {
         _loadedTimestamp = event.endTimestamp;
+        _cachedTimestamp = event.endTimestamp;
         appendBytes(event.bytes);
         onFragmentTimer();
     }
@@ -331,20 +343,49 @@ public class DashNetStream extends NetStream {
                 { code: NetStreamCodes.NETSTREAM_FAILED, level: "error" }));
     }
 
+    override public function appendBytes(bytes:ByteArray):void {
+        super.appendBytes(bytes);
+        ba.writeBytes(bytes);
+    }
+
     private function onFragmentTimer(timerEvent:TimerEvent = null):void {
         _fragmentTimer.stop();
+        //_cachedTimestamp = _cachedTimestamp || _loadedTimestamp;
+
+        /*if (_loader.flushCacheIfNeed(_loadedTimestamp)) {
+         _cachedTimestamp = _loadedTimestamp;
+         }*/
 
         if ((_loadedTimestamp - time) < MAX_BUFFER_TIME) {
             _loader.loadNextFragment();
         } else {
+            /*if ((_cachedTimestamp - time) < MAX_CACHE_TIME) {
+             //Console.js(_cachedTimestamp);
+             _loader.cacheNextFragment(_cachedTimestamp, function (e):void {
+             _cachedTimestamp = e.segment.endTimestamp;
+             //Console.js('cache request', e.segment.startTimestamp, e.segment.endTimestamp);
+             _fragmentTimer.start();
+             });
+             } else {*/
             _fragmentTimer.start();
+            //}
+
+
         }
     }
 
+    //remove me
+    public var ba = new ByteArray();
+
+    public function get currentQuality():Number {
+        return _loader.getIndexById(_loader.getVideoSegment(time).representationId);
+    }
+
     private function onNetStatus(event:NetStatusEvent):void {
-        switch(event.info.code) {
+
+        switch (event.info.code) {
             case NetStreamCodes.NETSTREAM_BUFFER_EMPTY:
-                if  (_loaded) {
+                if (_loaded) {
                     close();
                     notifyPlayUnpublish();
                 }
@@ -358,6 +399,7 @@ public class DashNetStream extends NetStream {
     private function onEnd(event:StreamEvent):void {
         _loaded = true;
         _loadedTimestamp = _duration;
+        _cachedTimestamp = _duration;
     }
 }
 }

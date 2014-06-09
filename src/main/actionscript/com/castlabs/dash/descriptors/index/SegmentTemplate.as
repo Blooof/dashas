@@ -60,7 +60,7 @@ public class SegmentTemplate implements SegmentIndex {
         var startTimestamp:Number = index * segmentDuration;
         var endTimestamp:Number = startTimestamp + segmentDuration;
 
-        return new MediaDataSegment(internalRepresentationId, baseUrl + url, "0-", startTimestamp, endTimestamp);
+        return new MediaDataSegment(internalRepresentationId, baseUrl + url, "0-", startTimestamp, endTimestamp,representationId);
     }
 
     public function update(xml:XML):void {

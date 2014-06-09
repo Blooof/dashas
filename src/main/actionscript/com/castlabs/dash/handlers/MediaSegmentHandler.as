@@ -13,6 +13,7 @@ import com.castlabs.dash.boxes.Muxer;
 import com.castlabs.dash.boxes.NalUnit;
 import com.castlabs.dash.boxes.TrackFragmentHeaderBox;
 import com.castlabs.dash.boxes.TrackFragmentRunBox;
+import com.castlabs.dash.utils.Console;
 
 import flash.utils.ByteArray;
 
@@ -34,9 +35,7 @@ public class MediaSegmentHandler extends SegmentHandler {
 
     private var _muxer:Muxer;
 
-    public function MediaSegmentHandler(ba:ByteArray, messages:Vector.<FLVTag>, videoDefaultSampleDuration:uint,
-                                        audioDefaultSampleDuration:uint, videoTimescale:uint,
-                                        audioTimescale:uint, timestamp:Number, muxer:Muxer) {
+    public function MediaSegmentHandler(ba:ByteArray, messages:Vector.<FLVTag>, videoDefaultSampleDuration:uint, audioDefaultSampleDuration:uint, videoTimescale:uint, audioTimescale:uint, timestamp:Number, muxer:Muxer) {
         _messages = messages;
         _videoDefaultSampleDuration = videoDefaultSampleDuration;
         _audioDefaultSampleDuration = audioDefaultSampleDuration;
@@ -48,6 +47,7 @@ public class MediaSegmentHandler extends SegmentHandler {
         _muxer = muxer;
 
         while (ba.bytesAvailable > 0) {
+            if (_disposed) return;
             parseMovieFragmentBox(ba, ba.position);
             parseMediaDataBox(ba);
         }
@@ -96,8 +96,16 @@ public class MediaSegmentHandler extends SegmentHandler {
     }
 
     private function mux():void {
+        if (_disposed) return;
         _bytes = _muxer.mux(_messages);
         _bytes.position = 0; // reset
+    }
+
+    private var _disposed:Boolean = false;
+
+    public function dispose() {
+        _disposed = true;
+        _bytes.position = 0;
     }
 
     public function processTrackBox(ba:ByteArray):void {
@@ -145,7 +153,6 @@ public class MediaSegmentHandler extends SegmentHandler {
     private function loadMessages(runBox:TrackFragmentRunBox, baseDataOffset:Number, ba:ByteArray, video:Boolean):void {
         var dataOffset:uint = runBox.dataOffset + baseDataOffset;
         var sampleSizes:Vector.<uint> = runBox.sampleSize;
-
         for (var i:uint = 0; i < sampleSizes.length; i++) {
             var sampleDuration:uint = loadSampleDuration(runBox, i, video ? _videoDefaultSampleDuration : _audioDefaultSampleDuration);
             var compositionTimeOffset:int = loadCompositionTimeOffset(runBox, i);
@@ -178,9 +185,7 @@ public class MediaSegmentHandler extends SegmentHandler {
         return i < runBox.sampleIsDependedOn.length ? runBox.sampleIsDependedOn[i] : 0;
     }
 
-    protected function buildVideoMessage(sampleDuration:uint, sampleSize:uint, sampleDependsOn:uint,
-                                             sampleIsDependedOn:uint, compositionTimeOffset:Number,
-                                             dataOffset:uint, ba:ByteArray):FLVTag {
+    protected function buildVideoMessage(sampleDuration:uint, sampleSize:uint, sampleDependsOn:uint, sampleIsDependedOn:uint, compositionTimeOffset:Number, dataOffset:uint, ba:ByteArray):FLVTag {
         var message:FLVTag = new FLVTag();
 
         message.markAsVideo();
@@ -214,9 +219,7 @@ public class MediaSegmentHandler extends SegmentHandler {
     }
 
 
-    protected function buildAudioMessage(sampleDuration:uint, sampleSize:uint, sampleDependsOn:uint,
-                                             sampleIsDependedOn:uint, compositionTimeOffset:Number,
-                                             dataOffset:uint, ba:ByteArray):FLVTag {
+    protected function buildAudioMessage(sampleDuration:uint, sampleSize:uint, sampleDependsOn:uint, sampleIsDependedOn:uint, compositionTimeOffset:Number, dataOffset:uint, ba:ByteArray):FLVTag {
         var message:FLVTag = new FLVTag();
 
         message.markAsAudio();

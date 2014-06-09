@@ -49,7 +49,7 @@ public class SegmentList implements SegmentIndex {
         var endTimestamp:Number = startTimestamp + segmentDuration;
 
         return new MediaDataSegment(internalRepresentationId, baseUrl + _segments[index].filename,
-                _segments[index].range, startTimestamp, endTimestamp);
+                _segments[index].range, startTimestamp, endTimestamp,representationId);
     }
 
     public function update(xml:XML):void {

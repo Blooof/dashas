@@ -11,7 +11,7 @@ public class DataSegment extends Segment {
     protected var _url:String;
     protected var _range:String;
 
-    public function DataSegment(internalRepresentationId:Number, url:String, range:String="0-") {
+    public function DataSegment(internalRepresentationId:Number, url:String, range:String = "0-") {
         super(internalRepresentationId);
 
         _url = url;
@@ -29,6 +29,10 @@ public class DataSegment extends Segment {
     override public function toString():String {
         return "internalRepresentationId='" + _internalRepresentationId
                 + "', url='" + _url + "', range='" + _range + "'";
+    }
+
+    public function get startBytesOffset():int {
+        return _range.split("-")[0] || 0;
     }
 }
 }

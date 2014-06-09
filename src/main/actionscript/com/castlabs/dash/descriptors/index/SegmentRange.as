@@ -49,7 +49,7 @@ public class SegmentRange implements SegmentIndex {
         var reference:Object = _indexSegmentHandler.references[index];
 
         return new MediaDataSegment(internalRepresentationId, baseUrl + _baseUrl, reference.range,
-                reference.startTimestamp, reference.endTimestamp);
+                reference.startTimestamp, reference.endTimestamp,representationId);
     }
 
     public function update(xml:XML):void {

@@ -68,7 +68,7 @@ public class SegmentTimeline extends SegmentTemplate implements SegmentIndex {
         var startTimestamp:Number = seconds(segment.time);
         var endTimestamp:Number = startTimestamp + seconds(segment.duration);
 
-        return new MediaDataSegment(internalRepresentationId, baseUrl + url, "0-", startTimestamp, endTimestamp);
+        return new MediaDataSegment(internalRepresentationId, baseUrl + url, "0-", startTimestamp, endTimestamp,representationId);
     }
 
     private function findSegment(timestamp:Number):Object {

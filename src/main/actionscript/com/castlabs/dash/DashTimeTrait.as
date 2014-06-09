@@ -40,5 +40,9 @@ public class DashTimeTrait extends TimeTrait {
                 break;
         }
     }
+
+    public function get stream():DashNetStream {
+        return _stream;
+    }
 }
 }

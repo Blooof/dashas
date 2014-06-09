@@ -9,6 +9,10 @@
 package com.castlabs.dash {
 import com.castlabs.dash.utils.Console;
 
+import flash.display.MovieClip;
+
+import flash.display.MovieClip;
+
 import flash.display.Sprite;
 
 import org.osmf.elements.VideoElement;

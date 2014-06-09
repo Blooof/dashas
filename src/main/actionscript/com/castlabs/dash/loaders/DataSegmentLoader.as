@@ -7,7 +7,9 @@
  */
 
 package com.castlabs.dash.loaders {
+import com.castlabs.dash.DashNetStream;
 import com.castlabs.dash.descriptors.segments.DataSegment;
+import com.castlabs.dash.descriptors.segments.MediaDataSegment;
 import com.castlabs.dash.descriptors.segments.Segment;
 import com.castlabs.dash.events.SegmentEvent;
 import com.castlabs.dash.utils.BandwidthMonitor;
@@ -64,6 +66,7 @@ public class DataSegmentLoader extends SegmentLoader {
         Console.getInstance().debug("Loaded segment, url='" + getUrl() + "'");
 
         var bytes:ByteArray = URLLoader(event.target).data;
+
         dispatchEvent(new SegmentEvent(SegmentEvent.LOADED, false, false, _segment, bytes));
     }
 }

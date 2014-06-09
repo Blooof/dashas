@@ -24,7 +24,9 @@ import com.castlabs.dash.utils.Console;
 
 import flash.events.EventDispatcher;
 import flash.events.TimerEvent;
+import flash.external.ExternalInterface;
 import flash.utils.ByteArray;
+import flash.utils.CompressionAlgorithm;
 import flash.utils.Dictionary;
 import flash.utils.Timer;
 
@@ -51,15 +53,18 @@ public class FragmentLoader extends EventDispatcher {
 
     private var _waitTimer:Timer;
 
-    public function FragmentLoader(manifest:ManifestHandler, iterator:AdaptiveSegmentDispatcher,
-                                   monitor:BandwidthMonitor, mixer:Muxer) {
-       _manifest = manifest;
-       _iterator = iterator;
-       _monitor = monitor;
-       _mixer = mixer;
 
-       _waitTimer = new Timer(250); // 250 ms
-       _waitTimer.addEventListener(TimerEvent.TIMER, loadNextFragment);
+    private var cacheFirst = [];
+    private var cache = {};
+
+    public function FragmentLoader(manifest:ManifestHandler, iterator:AdaptiveSegmentDispatcher, monitor:BandwidthMonitor, mixer:Muxer) {
+        _manifest = manifest;
+        _iterator = iterator;
+        _monitor = monitor;
+        _mixer = mixer;
+
+        _waitTimer = new Timer(250); // 250 ms
+        _waitTimer.addEventListener(TimerEvent.TIMER, loadNextFragment);
     }
 
     public function init():void {
@@ -71,13 +76,27 @@ public class FragmentLoader extends EventDispatcher {
     public function seek(timestamp:Number):Number {
         close();
 
-        _videoSegment = MediaDataSegment(_iterator.getVideoSegment(timestamp));
+        _videoSegment = getVideoSegment(timestamp);
 
         _videoOffset = timestamp;
 
         Console.getInstance().info("Seek to video segment: " + _videoSegment);
-
         return timestamp; // offset
+    }
+
+    public function getVideoSegment(timestamp:Number):MediaDataSegment {
+        var _videoSegment = MediaDataSegment(_iterator.getVideoSegment(timestamp));
+
+        var cachedSegmentObj:Object = getBestAvailableSegmentRepresentationInCache(_videoSegment.startTimestamp);
+        if (cachedSegmentObj) {
+            _videoSegment = MediaDataSegment(_iterator.getVideoSegmentByIndex(cachedSegmentObj.index, timestamp));
+        }
+
+        return _videoSegment;
+    }
+
+    public function getIndexById(id):Number {
+        return _iterator.getIndexById(id);
     }
 
     public function loadFirstFragment():void {
@@ -101,6 +120,11 @@ public class FragmentLoader extends EventDispatcher {
                 return;
             }
 
+            var cachedSegmentObj:Object = getBestAvailableSegmentRepresentationInCache(_videoSegment.endTimestamp);
+            if (cachedSegmentObj) {
+                segment2 = MediaDataSegment(_iterator.getVideoSegmentByIndex(cachedSegmentObj.index, _videoSegment.endTimestamp));
+            }
+
             _videoSegment = MediaDataSegment(segment2);
         }
 
@@ -116,6 +140,32 @@ public class FragmentLoader extends EventDispatcher {
             Console.getInstance().info("Next video segment: " + _videoSegment);
             _videoSegmentLoader = loadSegment(_videoSegment, onVideoSegmentLoaded);
         }
+    }
+
+    public function cacheNextFragment(timestamp:Number, callback:Function):void {
+        if (!getBestAvailableSegmentRepresentationInCache(timestamp)) {
+            var _videoSegment:MediaDataSegment = _iterator.getVideoSegment(timestamp) as MediaDataSegment;
+            loadSegment(_videoSegment, callback);
+        }
+
+    }
+
+    public function flushCacheIfNeed(timestamp:Number):Boolean {
+        var isFlushed:Boolean = false;
+        var caclulatedCurrentRepresentation:Number = _iterator.getManualQuality(-1);
+        if (caclulatedCurrentRepresentation != -1) {
+            for (var k in cache) {
+                if (parseInt(k.split('_')[1]) >= timestamp) {
+                    if (caclulatedCurrentRepresentation > cache[k].length - 1) {
+                        Console.js("flushed cache for " + timestamp);
+                        cache[k] = null;
+                        isFlushed = true;
+                    }
+                }
+            }
+        }
+
+        return isFlushed
     }
 
     private function logMediaBandwidth():void {
@@ -195,7 +245,7 @@ public class FragmentLoader extends EventDispatcher {
         var offset:Number = findSmallerOffset();
 
         Console.getInstance().debug("Processing video segment...");
-
+        if (_videoSegmentHandler)_videoSegmentHandler.dispose();
         _videoSegmentHandler = new MediaSegmentHandler(event.bytes, _initializationSegmentHandler.messages,
                 _initializationSegmentHandler.videoDefaultSampleDuration, _initializationSegmentHandler.audioDefaultSampleDuration,
                 _initializationSegmentHandler.videoTimescale, _initializationSegmentHandler.audioTimescale,
@@ -220,12 +270,58 @@ public class FragmentLoader extends EventDispatcher {
         return _videoOffset
     }
 
-    private function loadSegment(segment:Segment, callback:Function):SegmentLoader {
+    private function _serverLoadSegment(segment:Segment, callback:Function):SegmentLoader {
         var loader:SegmentLoader = SegmentLoaderFactory.create(segment, _monitor);
-        loader.addEventListener(SegmentEvent.LOADED, callback);
+        loader.addEventListener(SegmentEvent.LOADED, function (event:SegmentEvent):void {
+
+            if (segment instanceof MediaDataSegment) {
+                var mds:MediaDataSegment = segment as MediaDataSegment;
+                cache['_' + mds.startTimestamp] = cache['_' + mds.startTimestamp] || [];
+                var index = _iterator.getIndexById(mds.representationId);
+                //Console.js("cached", index, mds.representationId, mds.startTimestamp);
+                cache['_' + mds.startTimestamp][index] = event.bytes;
+            }
+
+            callback(event);
+        });
         loader.addEventListener(SegmentEvent.ERROR, onError);
         loader.load();
         return loader;
+    }
+
+    private function loadSegment(segment:Segment, callback:Function):SegmentLoader {
+        if (segment instanceof MediaDataSegment) {
+            var mds:MediaDataSegment = segment as MediaDataSegment;
+            var requestedIndex:int = _iterator.getIndexById(mds.representationId);
+
+            var cachedSegmentObj:Object = getBestAvailableSegmentRepresentationInCache(mds.startTimestamp);
+            /*if (cachedSegmentObj) {
+             Console.js("req " + requestedIndex, "max avail " + cachedSegmentObj.index);
+             }*/
+            if (cachedSegmentObj && requestedIndex <= cachedSegmentObj.index) {
+                cachedSegmentObj.ba.position = 0;
+                callback(new SegmentEvent(SegmentEvent.LOADED, false, false, segment, cachedSegmentObj.ba));
+                return null;
+            } else {
+                return _serverLoadSegment(segment, callback);
+            }
+
+        } else {
+            return _serverLoadSegment(segment, callback);
+        }
+
+    }
+
+    private function getBestAvailableSegmentRepresentationInCache(startTimestamp:Number):Object {
+        var segmentCache:Object = cache['_' + startTimestamp];
+        if (segmentCache) {
+            var index:int = segmentCache.length - 1;
+
+            //Console.js("from cache " + index + " " + startTimestamp);
+            return {index: index, ba: segmentCache[index]};
+        } else {
+            return null;
+        }
     }
 
     private function notifyLoadedIfNeeded():void {
@@ -254,5 +350,6 @@ public class FragmentLoader extends EventDispatcher {
         _videoSegmentHandler = null;
         _videoSegmentLoaded = false;
     }
+
 }
 }

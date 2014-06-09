@@ -9,6 +9,7 @@
 package com.castlabs.dash.utils {
 import flash.events.TimerEvent;
 import flash.external.ExternalInterface;
+import flash.system.Capabilities;
 import flash.utils.Timer;
 
 public class Console {
@@ -126,6 +127,22 @@ public class Console {
             dataset: type,
             bandwidth: bandwidth
         });
+    }
+
+
+    public static function js(...rest) {
+        if (ExternalInterface.available) {
+            ExternalInterface.call("console.log", rest);
+        }
+    }
+
+    public static function get getDebugInfo():String {
+          ExternalInterface.call("console.log", new Error().getStackTrace())
+        var ret:int = -1;
+        if (Capabilities.isDebugger) {
+            ret = new Error().getStackTrace().match(/(?<=:)[0-9]*(?=])/g)[1];
+        }
+        return ret + ">   ";
     }
 }
 }
