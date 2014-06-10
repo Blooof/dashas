@@ -48,7 +48,6 @@ public class FragmentLoader extends EventDispatcher {
     private var _videoSegment:MediaDataSegment;
 
     private var _videoOffset:Number = 0;
-    private var _videoLastOffset:Number = 0;
 
     private var _firstSegment:Boolean = false;
 
@@ -80,7 +79,6 @@ public class FragmentLoader extends EventDispatcher {
         _videoSegment = getVideoSegment(timestamp);
 
         _videoOffset = timestamp;
-        _videoLastOffset = 0;
 
         Console.getInstance().info("Seek to video segment: " + _videoSegment);
         return timestamp; // offset
@@ -251,7 +249,7 @@ public class FragmentLoader extends EventDispatcher {
         _videoSegmentHandler = new MediaSegmentHandler(event.bytes, _initializationSegmentHandler.messages,
                 _initializationSegmentHandler.videoDefaultSampleDuration, _initializationSegmentHandler.audioDefaultSampleDuration,
                 _initializationSegmentHandler.videoTimescale, _initializationSegmentHandler.audioTimescale,
-                (_videoSegment.startTimestamp - offset) * 1000, _videoLastOffset * 1000, _mixer);
+                (_videoSegment.startTimestamp - offset) * 1000, _mixer);
 
         Console.getInstance().debug("Processed video segment");
 
@@ -259,7 +257,6 @@ public class FragmentLoader extends EventDispatcher {
             _firstSegment = false;
             _videoOffset = _videoSegment.startTimestamp + (_videoSegmentHandler.startTimestamp / 1000.0);
         }
-        _videoLastOffset = _videoSegment.endTimestamp - _videoOffset;
         _videoSegmentLoaded = true;
 
         notifyLoadedIfNeeded();
