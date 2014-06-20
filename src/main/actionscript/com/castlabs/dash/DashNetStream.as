@@ -30,7 +30,7 @@ import org.osmf.net.NetStreamCodes;
 public class DashNetStream extends NetStream {
     private var MIN_BUFFER_TIME:Number;
     private var MAX_BUFFER_TIME:Number;
-    private var MAX_CACHE_TIME:Number;
+    //private var MAX_CACHE_TIME:Number;
 
     // actions
     private const PLAY:uint = 1;
@@ -211,8 +211,8 @@ public class DashNetStream extends NetStream {
         _duration = manifest.duration;
 
         MIN_BUFFER_TIME = Math.min(5, _duration);
-        MAX_BUFFER_TIME = Math.max(180, Math.floor(_duration / 7)); //Math.min(3, _duration);
-        MAX_CACHE_TIME = Math.max(180, Math.floor(_duration / 7));
+        MAX_BUFFER_TIME = Math.min(10, _duration);
+        //MAX_CACHE_TIME = Math.max(180, Math.floor(_duration / 7));
 
         _loader = Factory.createFragmentLoader(manifest);
         _loader.addEventListener(StreamEvent.READY, onReady);
@@ -342,10 +342,11 @@ public class DashNetStream extends NetStream {
         dispatchEvent(new NetStatusEvent(NetStatusEvent.NET_STATUS, false, false,
                 { code: NetStreamCodes.NETSTREAM_FAILED, level: "error" }));
     }
+    //public var ba:ByteArray = new ByteArray();
 
     override public function appendBytes(bytes:ByteArray):void {
         super.appendBytes(bytes);
-        ba.writeBytes(bytes);
+        //ba.writeBytes(bytes);
     }
 
     private function onFragmentTimer(timerEvent:TimerEvent = null):void {
@@ -374,11 +375,13 @@ public class DashNetStream extends NetStream {
         }
     }
 
-    //remove me
-    public var ba = new ByteArray();
-
     public function get currentQuality():Number {
-        return _loader.getIndexById(_loader.getVideoSegment(time).representationId);
+        var _currentQuality = 0;
+        try {
+            _currentQuality = _loader.getIndexById(_loader.getVideoSegment(time).representationId);
+        } catch (e) {
+        }
+        return _currentQuality
     }
 
     private function onNetStatus(event:NetStatusEvent):void {

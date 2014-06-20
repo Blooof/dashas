@@ -54,7 +54,6 @@ public class FragmentLoader extends EventDispatcher {
     private var _waitTimer:Timer;
 
 
-    private var cacheFirst = [];
     private var cache = {};
 
     public function FragmentLoader(manifest:ManifestHandler, iterator:AdaptiveSegmentDispatcher, monitor:BandwidthMonitor, mixer:Muxer) {
@@ -87,10 +86,15 @@ public class FragmentLoader extends EventDispatcher {
     public function getVideoSegment(timestamp:Number):MediaDataSegment {
         var _videoSegment = MediaDataSegment(_iterator.getVideoSegment(timestamp));
 
-        var cachedSegmentObj:Object = getBestAvailableSegmentRepresentationInCache(_videoSegment.startTimestamp);
-        if (cachedSegmentObj) {
-            _videoSegment = MediaDataSegment(_iterator.getVideoSegmentByIndex(cachedSegmentObj.index, timestamp));
+        try{
+            var cachedSegmentObj:Object = getBestAvailableSegmentRepresentationInCache(_videoSegment.startTimestamp);
+            if (cachedSegmentObj) {
+                _videoSegment = MediaDataSegment(_iterator.getVideoSegmentByIndex(cachedSegmentObj.index, timestamp));
+            }
+        } catch(e){
+
         }
+
 
         return _videoSegment;
     }

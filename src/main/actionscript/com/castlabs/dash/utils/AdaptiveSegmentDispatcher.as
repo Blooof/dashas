@@ -16,14 +16,11 @@ import flash.external.ExternalInterface;
 public class AdaptiveSegmentDispatcher {
     private var _manifest:ManifestHandler;
     private var _bandwidthMonitor:BandwidthMonitor;
-    private var _smoothMonitor:SmoothMonitor;
     private var _oldIndex:uint = 0;
-    
-    public function AdaptiveSegmentDispatcher(manifest:ManifestHandler, bandwidthMonitor:BandwidthMonitor,
-                                              smoothMonitor:SmoothMonitor) {
+
+    public function AdaptiveSegmentDispatcher(manifest:ManifestHandler, bandwidthMonitor:BandwidthMonitor) {
         _manifest = manifest;
         _bandwidthMonitor = bandwidthMonitor;
-        _smoothMonitor = smoothMonitor;
     }
 
     public function getVideoSegment(timestamp:Number):Segment {
@@ -44,41 +41,27 @@ public class AdaptiveSegmentDispatcher {
     }
 
     private function findOptimalRepresentation(representations:Vector.<Representation>):Representation {
-
         if (representations.length == 0) {
             return null;
         }
 
-        var index:int = 0;
-
-        for (var i:uint = 0; i < representations.length; i++) {
-            if (_bandwidthMonitor.userBandwidth >= representations[i].bandwidth) {
-                index = i;
+        var newIndex:uint = _oldIndex;
+        while (true) {
+            if (newIndex < 0 || newIndex > representations.length) {
+                break;
+            } else if (_bandwidthMonitor.userBandwidth < representations[newIndex].bandwidth && newIndex > 0) {
+                newIndex--;
+            } else if (newIndex < representations.length - 1 && _bandwidthMonitor.userBandwidth > representations[newIndex + 1].bandwidth * 1.1) {
+                newIndex++;
             } else {
                 break;
             }
         }
 
-        index -= _smoothMonitor.fix;
-        if (index < 0) {
-            index = 0;
-        }
 
-
-        index = getManualQuality(index);
-
-        //index = 0;
-        //Console.js("calculated quality ", index, representations[index].id);
-        /*Console.js("qetQuality", qualityName, representations[index].bandwidth);
-         if (index != oldIndex) {
-         Console.js("Downgrade quality, originalBandwidth='" + representations[oldIndex].bandwidth
-         + "', newBandwidth='" + representations[index].bandwidth + "'");
-         }*/
-
-        return representations[index];
+        newIndex = getManualQuality(newIndex);
+        return representations[newIndex];
     }
-
-    var x;
 
     public function getManualQuality(defaultQualityIndex) {
         var index = defaultQualityIndex;
@@ -87,18 +70,11 @@ public class AdaptiveSegmentDispatcher {
 
             if (qualityIndex != -1) {
                 index = qualityIndex;
-
-                if (index != x) {
-                    Console.js(index);
-                    x = index;
-                }
-
             }
         } catch (e) {
         }
 
         return index;
     }
-}
 }
 }
