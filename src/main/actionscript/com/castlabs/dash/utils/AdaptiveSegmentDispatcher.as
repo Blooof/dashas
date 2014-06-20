@@ -17,8 +17,10 @@ public class AdaptiveSegmentDispatcher {
     private var _manifest:ManifestHandler;
     private var _bandwidthMonitor:BandwidthMonitor;
     private var _smoothMonitor:SmoothMonitor;
-
-    public function AdaptiveSegmentDispatcher(manifest:ManifestHandler, bandwidthMonitor:BandwidthMonitor, smoothMonitor:SmoothMonitor) {
+    private var _oldIndex:uint = 0;
+    
+    public function AdaptiveSegmentDispatcher(manifest:ManifestHandler, bandwidthMonitor:BandwidthMonitor,
+                                              smoothMonitor:SmoothMonitor) {
         _manifest = manifest;
         _bandwidthMonitor = bandwidthMonitor;
         _smoothMonitor = smoothMonitor;
@@ -97,5 +99,6 @@ public class AdaptiveSegmentDispatcher {
 
         return index;
     }
+}
 }
 }
