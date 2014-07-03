@@ -16,7 +16,7 @@ import flash.external.ExternalInterface;
 public class AdaptiveSegmentDispatcher {
     private var _manifest:ManifestHandler;
     private var _bandwidthMonitor:BandwidthMonitor;
-    private var _oldIndex:uint = 0;
+    public var _oldIndex:int = -1;
 
     public function AdaptiveSegmentDispatcher(manifest:ManifestHandler, bandwidthMonitor:BandwidthMonitor) {
         _manifest = manifest;
@@ -45,36 +45,46 @@ public class AdaptiveSegmentDispatcher {
             return null;
         }
 
-        var newIndex:uint = _oldIndex;
+        var newIndex:int = _oldIndex;
         while (true) {
-            if (newIndex < 0 || newIndex > representations.length) {
+            if (newIndex < 0 || newIndex >= representations.length) {
                 break;
-            } else if (_bandwidthMonitor.userBandwidth < representations[newIndex].bandwidth && newIndex > 0) {
+            } else if (_bandwidthMonitor.userBandwidth < representations[newIndex].bandwidth) {
                 newIndex--;
-            } else if (newIndex < representations.length - 1 && _bandwidthMonitor.userBandwidth > representations[newIndex + 1].bandwidth * 1.1) {
+            } else if (newIndex < representations.length - 1 &&
+                    _bandwidthMonitor.userBandwidth > representations[newIndex + 1].bandwidth * 1.4) {
                 newIndex++;
             } else {
                 break;
             }
         }
 
-
-        newIndex = getManualQuality(newIndex);
-        return representations[newIndex];
-    }
-
-    public function getManualQuality(defaultQualityIndex) {
-        var index = defaultQualityIndex;
         try {
-            var qualityIndex = ExternalInterface.call('qetQuality');
+            var qualityVo = ExternalInterface.call('qetQuality');
+            if (qualityVo.manual == -1) {
+                if (_oldIndex == -1) {
+                    newIndex = qualityVo.suggest || 0;
+                    //Console.js('123', newIndex);
 
-            if (qualityIndex != -1) {
-                index = qualityIndex;
+                }
+            } else {
+                newIndex = qualityVo.manual;
             }
+
         } catch (e) {
         }
 
-        return index;
+        //Console.js(newIndex);
+
+        _oldIndex = newIndex;
+
+        //newIndex = 3;
+
+        if (newIndex < 0) newIndex = 0;
+        if (newIndex > representations.length - 1) newIndex = representations.length - 1;
+
+        return representations[newIndex];
     }
+
 }
 }

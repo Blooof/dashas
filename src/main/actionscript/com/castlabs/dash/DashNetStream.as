@@ -24,13 +24,14 @@ import flash.net.NetStream;
 import flash.net.NetStreamAppendBytesAction;
 import flash.utils.ByteArray;
 import flash.utils.Timer;
+import flash.utils.setTimeout;
 
 import org.osmf.net.NetStreamCodes;
 
 public class DashNetStream extends NetStream {
-    private var MIN_BUFFER_TIME:Number;
-    private var MAX_BUFFER_TIME:Number;
-    //private var MAX_CACHE_TIME:Number;
+    public static var MIN_BUFFER_TIME:Number;
+    private static var MAX_BUFFER_TIME:Number;
+    private static var MAX_CACHE_TIME:Number;
 
     // actions
     private const PLAY:uint = 1;
@@ -67,7 +68,7 @@ public class DashNetStream extends NetStream {
 
         addEventListener(NetStatusEvent.NET_STATUS, onNetStatus);
 
-        _bufferTimer = new Timer(250); // 250 ms
+        _bufferTimer = new Timer(350);
         _bufferTimer.addEventListener(TimerEvent.TIMER, onBufferTimer);
 
         _fragmentTimer = new Timer(250); // 250 ms
@@ -93,23 +94,36 @@ public class DashNetStream extends NetStream {
 
     private function onBufferTimer(timerEvent:TimerEvent):void {
         var bufferTime:Number = _cachedTimestamp - time;
-        switch (_state) {
+
+        //Console.js(bufferTime);
+
+        /*switch (_state) {
             case PLAYING:
-                if (!_loaded && bufferTime < Math.min(MIN_BUFFER_TIME, _duration)) {
-                    pause();
+                if (!_loaded && bufferTime - MIN_BUFFER_TIME < 0) {
+                    //pause();
                     notifyBufferEmpty();
                     updateState(BUFFER);
                     return;
                 }
                 break;
             case BUFFERING:
-                if (bufferTime >= Math.min(MIN_BUFFER_TIME, _duration)) {
+                if (bufferTime >= MIN_BUFFER_TIME) {
                     resume();
                     notifyBufferFull();
                     return;
                 }
                 break;
+        }*/
+
+
+        if (bufferTime >= MIN_BUFFER_TIME) {
+            notifyBufferFull();
+            updateState(BUFFER);
+        } else if(!_loaded){
+            resume();
+            notifyBufferEmpty();
         }
+
     }
 
     override public function pause():void {
@@ -135,10 +149,11 @@ public class DashNetStream extends NetStream {
     }
 
     override public function seek(offset:Number):void {
+        //Console.js('seek state', _state);
         switch (_state) {
             case PAUSED:
-            case SEEKING:
             case STOPPED:
+            case SEEKING:
                 _fragmentTimer.stop();
                 _loader.close();
                 _offset = offset;
@@ -155,6 +170,8 @@ public class DashNetStream extends NetStream {
         }
 
         updateState(SEEK);
+
+        _cachedTimestamp = _loadedTimestamp;
     }
 
     override public function get time():Number {
@@ -210,9 +227,11 @@ public class DashNetStream extends NetStream {
         _live = manifest.live;
         _duration = manifest.duration;
 
-        MIN_BUFFER_TIME = Math.min(5, _duration);
-        MAX_BUFFER_TIME = Math.min(10, _duration);
-        //MAX_CACHE_TIME = Math.max(180, Math.floor(_duration / 7));
+        MIN_BUFFER_TIME = Math.min(2, _duration);
+
+        //MAX_BUFFER_TIME = Math.min(20, _duration);
+        MAX_BUFFER_TIME = Math.max(180, Math.floor(_duration / 7));
+        MAX_CACHE_TIME = Math.max(180, Math.floor(_duration / 7));
 
         _loader = Factory.createFragmentLoader(manifest);
         _loader.addEventListener(StreamEvent.READY, onReady);
@@ -288,6 +307,7 @@ public class DashNetStream extends NetStream {
     private function jump():void {
         _offset = _loader.seek(_offset);
         _loadedTimestamp = 0;
+        _cachedTimestamp = 0;
 
         super.seek(_offset);
 
@@ -324,6 +344,8 @@ public class DashNetStream extends NetStream {
     private function reset():void {
         _offset = 0;
         _loadedTimestamp = 0;
+        _cachedTimestamp = 0;
+
         _loaded = false;
     }
 
@@ -331,47 +353,67 @@ public class DashNetStream extends NetStream {
         dispatchEvent(event);
     }
 
+    //private var lastPushedEnd = -1;
+
     private function onLoaded(event:FragmentEvent):void {
+        //if (lastPushedEnd == event.endTimestamp)return;
+        //lastPushedEnd = event.endTimestamp;
+
         _loadedTimestamp = event.endTimestamp;
-        _cachedTimestamp = event.endTimestamp;
+
+        if (_cachedTimestamp < event.endTimestamp) {
+            _cachedTimestamp = event.endTimestamp;
+        }
+
+        //Console.js("pushed in stream till", event.endTimestamp);
+
         appendBytes(event.bytes);
+
         onFragmentTimer();
+
     }
 
     private function onError(event:SegmentEvent):void {
         dispatchEvent(new NetStatusEvent(NetStatusEvent.NET_STATUS, false, false,
                 { code: NetStreamCodes.NETSTREAM_FAILED, level: "error" }));
     }
-    //public var ba:ByteArray = new ByteArray();
 
-    override public function appendBytes(bytes:ByteArray):void {
-        super.appendBytes(bytes);
-        //ba.writeBytes(bytes);
-    }
+
+    /*private var lastQuality = 0;
+
+     private function flushIfNeed() {
+     try {
+     var qualityVo = ExternalInterface.call('qetQuality');
+
+     if (qualityVo.manual != -1 && qualityVo.manual > lastQuality) {
+     _cachedTimestamp = _loadedTimestamp;
+     lastQuality = qualityVo.manual;
+     //_fragmentTimer.start();
+     }
+
+     } catch (e) {
+     }
+     }*/
 
     private function onFragmentTimer(timerEvent:TimerEvent = null):void {
         _fragmentTimer.stop();
-        //_cachedTimestamp = _cachedTimestamp || _loadedTimestamp;
-
-        /*if (_loader.flushCacheIfNeed(_loadedTimestamp)) {
-         _cachedTimestamp = _loadedTimestamp;
-         }*/
-
         if ((_loadedTimestamp - time) < MAX_BUFFER_TIME) {
             _loader.loadNextFragment();
         } else {
-            /*if ((_cachedTimestamp - time) < MAX_CACHE_TIME) {
-             //Console.js(_cachedTimestamp);
+            _fragmentTimer.start();
+
+            /*flushIfNeed();
+
+             if ((_cachedTimestamp - time) < MAX_CACHE_TIME) {
              _loader.cacheNextFragment(_cachedTimestamp, function (e):void {
              _cachedTimestamp = e.segment.endTimestamp;
-             //Console.js('cache request', e.segment.startTimestamp, e.segment.endTimestamp);
+
+             Console.js('cache request', e.segment.startTimestamp + '-' + e.segment.endTimestamp);
              _fragmentTimer.start();
              });
-             } else {*/
-            _fragmentTimer.start();
-            //}
-
-
+             } else {
+             _fragmentTimer.start();
+             }*/
         }
     }
 
